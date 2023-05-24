@@ -226,7 +226,7 @@ def id(message):
 #  ! робоче меню
 @bot.message_handler(commands=['menu'])
 def menu(message):
-    markup = types.ReplyKeyboardMarkup()
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
     btn1 = types.KeyboardButton(f"пгода\n(смартфон)")
     btn4 = types.KeyboardButton('Погода на сьогодні')
     markup.row(btn1, btn4)
@@ -248,29 +248,23 @@ def on_click(message):
         menu(message)
     elif message.text == 'закрити меню':
         hide_buttons(message)
-    elif message.text == 'обрати місто':
+    elif message.text == 'Погода на сьогодні':
         bot.send_message(message.chat.id, 'Введіть назву міста англійською мовою:')
         bot.register_next_step_handler(message, search_cities)
 
-def menu_to_weather(message):
-    markup = types.ReplyKeyboardRemove()
-    bot.send_message(message.chat.id, "Погода на сьогодні", reply_markup=markup)
 
 def hide_buttons(message):
     markup = types.ReplyKeyboardRemove()
     bot.send_message(message.chat.id, "меню закрите", reply_markup=markup)
 
 
-# # ! отримання координат
-
-
-
+#  ! отримання координат
 def search_cities(message):
     city_name = message.text.strip()
     url = f'https://geocoding-api.open-meteo.com/v1/search?name={city_name}'
     response = requests.get(url)
     data = response.json()
-    print(data)
+    # print(data)
     if 'generationtime_ms' in data and not data.get('results'):
         bot.reply_to(message, 'Міста не знайдено5')
         return
@@ -280,7 +274,7 @@ def search_cities(message):
         bot.reply_to(message, 'Міста не знайдено3')
         return
 
-    markup = types.ReplyKeyboardMarkup()
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
 
     for city in cities:
         btn_text = f"{city['name']} \n {city['country']}, {city.get('admin1', '-')}"
@@ -295,10 +289,9 @@ def search_cities(message):
         }
 
     bot.send_message(message.chat.id, 'Оберіть місто зі списку:', reply_markup=markup)
-
     bot.register_next_step_handler(message, get_city_coordinates)
 
-
+# отримання довготи та широти
 def get_city_coordinates(message):
     selected_city = message.text.strip()
 
@@ -311,7 +304,6 @@ def get_city_coordinates(message):
     get_weather_forecast(message, latitude, longitude)
 
 # отримання погоди
-
 def get_weather_forecast(message, latitude, longitude):
     url = f'http://api.openweathermap.org/data/2.5/weather?lat={latitude}&lon={longitude}&appid={API}&lang=ua&units=metric'
 
@@ -337,6 +329,7 @@ def get_weather_forecast(message, latitude, longitude):
     Умови: {clouds}
     """)
 
+# розшифровка напряму вітру
 def get_wind_direction(degrees):
     if degrees < 0 or degrees > 360:
         return 'Невідомий'
@@ -348,9 +341,14 @@ def get_wind_direction(degrees):
 
 
 
-#     додавання зображень вiдносно погоди
 
-# ! регістрація юзерів
+
+
+
+
+
+
+# ___ регістрація юзерів у базу данних (не для бота)
 @bot.message_handler(commands=['new_user'])
 def new_user(message):
     # создание и подключение бази данных
