@@ -1,3 +1,4 @@
+
 import os.path
 import requests
 import telebot
@@ -5,11 +6,19 @@ import webbrowser
 import sqlite3
 import json
 import time
+
+from dotenv import load_dotenv
 from currency_converter import CurrencyConverter
 # from forex_python.converter import CurrencyRates
 from telebot import types, callback_data, callback_data
+from telebot.types import WebAppInfo
 
-bot = telebot.TeleBot('6089179411:AAG_SgFgx2wbcyDWHJX093G__19XJ_ArSJo') # ключ телеграм
+load_dotenv()
+
+BOT_TOKEN = os.environ.get('BOT_TOKEN')
+
+bot = telebot.TeleBot(BOT_TOKEN) # ключ телеграм
+
 API = 'a455439cb8ea542bbe57143066b6990a' # ключ погоди
 
 name = None     # Глобальна змінна для збереження імені контакта
@@ -19,10 +28,71 @@ amount = 0      # Глобальна змінна для збереження с
 city_data = {}  # Глобальна змінна для збереження даних про міста
 
 
+# ! При старті бота створюється база даних користувача
+@bot.message_handler(commands=['start'])
+def handle_start(message):
+    user_id = message.chat.id
+    create_user_database(user_id)
+    bot.send_message(message.chat.id, f'Вітаю {message.from_user.first_name} {message.from_user.last_name}!')
+
+
+#  ! Головне меню
+@bot.message_handler(commands=['menu'])
+def menu(message):
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
+    btn1 = types.KeyboardButton("Телефонна книга")
+    btn2 = types.KeyboardButton('Погода на сьогодні')
+    btn3 = types.KeyboardButton("Конвертор валют")
+    btn4 = types.KeyboardButton('Закрити меню')
+    btn5 = types.KeyboardButton('Мій ID')
+    btn6 = types.KeyboardButton('Список усіх команд')
+    btn7 = types.KeyboardButton('Сайт бота')
+    markup.row(btn1, btn2)
+    markup.row(btn3, btn7)
+    markup.row(btn5, btn6)
+    markup.row(btn4)
+    header_text = "--- МЕНЮ ---"
+    bot.send_message(message.chat.id, header_text, reply_markup=markup)
+    bot.register_next_step_handler(message, on_click_menu)
+
+
+def on_click_menu(message):
+    print(f"Користувач {message.from_user.username} натиснув кнопку: {message.text}")
+    if message.text == 'Телефонна книга':
+        phone_book_menu(message)
+
+    elif message.text == "Погода на сьогодні":
+        bot.send_message(message.chat.id, 'Введіть назву міста англійською мовою:')
+        bot.register_next_step_handler(message, search_cities)
+
+    elif message.text == 'Конвертор валют':
+        start_converter(message)
+
+    elif message.text == 'Закрити меню':
+        hide_buttons(message)
+
+    elif message.text == 'Мій ID':
+        id(message)
+
+    elif message.text == 'Список усіх команд':
+        help(message)
+
+    elif message.text == 'Сайт бота':
+        gosite(message)
+
+# до кнопка повернення до головного меню
+def button_back_to_menu(message):
+    markup = types.InlineKeyboardMarkup()
+    btn_menu = types.InlineKeyboardButton('МЕНЮ', callback_data='menu')
+    markup.add(btn_menu)
+    bot.send_message(message.chat.id, 'Натисніть "МЕНЮ" для повернення на головне меню.', reply_markup=markup)
+
+
+
 # ! конвертор валют
 # Хендлер для запуску ковертора
 @bot.message_handler(commands=['converter'])
-def start(message):
+def start_converter(message):
     bot.send_message(message.chat.id, 'Введіть суму')
     bot.register_next_step_handler(message, summa)
 
@@ -44,7 +114,10 @@ def summa(message):
         btn3 = types.InlineKeyboardButton('EUR/GBP ', callback_data='EUR/GBP')
         btn4 = types.InlineKeyboardButton('GBP/EUR', callback_data='GBP/EUR')
         btn5 = types.InlineKeyboardButton('Свій варіант', callback_data='else')
-        markup.add(btn1, btn2, btn3, btn4, btn5)
+        btn6 = types.InlineKeyboardButton('Головне меню', callback_data='menu')
+        markup.add(btn1, btn2, btn3, btn4)
+        markup.add(btn5)
+        markup.add(btn6)
         bot.send_message(message.chat.id, 'Оберіть умови конвертації', reply_markup=markup)
     else:
         bot.send_message(message.chat.id, 'Сума має бути більше нуля. Будь ласка, спробуйте ще раз.')
@@ -54,13 +127,17 @@ def summa(message):
 # Обробник обраних користувачем кнопок
 @bot.callback_query_handler(func=lambda call: True)
 def callback(call):
-    if call.data != 'else':
+    if call.data == "menu":
+        menu(call.message)
+
+    elif call.data != 'else':
         values_btn = call.data.split('/')
         source_currency = values_btn[0]
         target_currency = values_btn[1]
         converted_amount = currency.convert(amount, source_currency, target_currency)
-        bot.send_message(call.message.chat.id, f'{amount} {source_currency} = {round(converted_amount, 2)} {target_currency}')
-        return
+        bot.send_message(call.message.chat.id,
+                         f'{amount} {source_currency} = {round(converted_amount, 2)} {target_currency}')
+
     elif call.data == 'else':
         bot.send_message(call.message.chat.id, 'введіть свій варіант конвертації валют, за зразком "CNY/EUR"')
         bot.register_next_step_handler(call.message, my_carrency)
@@ -72,65 +149,98 @@ def my_carrency(message):
         source_currency = values_btn[0]
         target_currency = values_btn[1]
         converted_amount = currency.convert(amount, source_currency, target_currency)
-        bot.send_message(message.chat.id, f'{amount} {source_currency} = {round(converted_amount, 2)} {target_currency}')
+        bot.send_message(message.chat.id,
+                         f'{amount} {source_currency} = {round(converted_amount, 2)} {target_currency}')
+
     except Exception:
         bot.send_message(message.chat.id, 'Щось пішло не так. Будь ласка, введіть суму ще раз.')
         bot.register_next_step_handler(message, summa)
-        return
 
 
 
 # ! телефонна книга
+# меню телефонної книги
+@bot.message_handler(commands=['phone_book_menu'])
+def phone_book_menu(message):
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
+    btn1 = types.KeyboardButton("Список контактів")
+    btn4 = types.KeyboardButton('Додати контакт')
+    markup.row(btn1, btn4)
+    btn2 = types.KeyboardButton("Видалити контакт")
+    btn3 = types.KeyboardButton('Закрити меню')
+    btn5 = types.KeyboardButton('Голомне меню')
+    markup.row(btn2, btn3)
+    header_text = "--- ТЕЛФОННА КНИГА ---"
+    bot.send_message(message.chat.id, header_text, reply_markup=markup)
+    bot.register_next_step_handler(message, on_click)
 
-# При старті бота створюється база даних користувача
-@bot.message_handler(commands=['start'])
-def handle_start(message):
-    user_id = message.chat.id
-    create_user_database(user_id)
-    bot.send_message(message.chat.id, f'Вітаю {message.from_user.first_name} {message.from_user.last_name}!')
+# Обробник кнопок
+def on_click(message):
+    print(f"Користувач {message.from_user.username} натиснув кнопку: {message.text}")
+    if message.text == 'Список контактів':
+        handle_show_contacts(message)
+
+    elif message.text == "Додати контакт":
+        handle_add_contact(message)
+
+    elif message.text == 'Видалити контакт':
+        handle_delete_contact(message)
+
+    elif message.text == 'Закрити меню':
+        hide_buttons(message)
+
+    elif message.text == 'Голомне меню':
+        menu(message)
+
+# Функція закриття меню
+def hide_buttons(message):
+    markup = types.ReplyKeyboardRemove()
+    bot.send_message(message.chat.id, "меню закрите", reply_markup=markup)
 
 # Функція приймає ім'я та запитує номеру контакту
 def ask_contact_name(message):
     global name
     name = message.text.strip()
-    bot.reply_to(message, 'Введіть номер контакту:')
-    bot.register_next_step_handler(message, ask_contact_number)
+
+    # Перевірка наявності імені в базі даних
+    user_id = message.chat.id
+    conn = sqlite3.connect(f'{user_id}_contacts.db')
+    c = conn.cursor()
+    c.execute('SELECT name FROM contacts WHERE name = ?', (name,))
+    existing_name = c.fetchone()
+    conn.close()
+
+    if existing_name:
+        bot.reply_to(message, f'Контакт з ім\'ям {name} вже існує. Будь ласка, введіть інше ім\'я.')
+        bot.register_next_step_handler(message, ask_contact_name)
+    else:
+        bot.reply_to(message, 'Введіть номер контакту:')
+        bot.register_next_step_handler(message, ask_contact_number)
 
 # Функція приймає номер контакту
 def ask_contact_number(message):
     phone_number = message.text.strip()
-    user_id = message.chat.id
-    conn = sqlite3.connect(f'{user_id}_contacts.db')
-    c = conn.cursor()
-    c.execute('INSERT INTO contacts (name, phone_number) VALUES (?, ?)', (name, phone_number))
-    conn.commit()
-    conn.close()
 
-    # Повідомлення про успішне додавання контакту
-    bot.reply_to(message, f'Контакт {name} з номером {phone_number} успішно доданий.')
+    # Перевірка, чи введений номер складається лише з цифр
+    if not phone_number.isdigit():
+        bot.reply_to(message, 'Номер контакту повинен містити лише цифри. Будь ласка, введіть коректний номер.')
+        bot.register_next_step_handler(message, ask_contact_number)
+    else:
+        user_id = message.chat.id
+        conn = sqlite3.connect(f'{user_id}_contacts.db')
+        c = conn.cursor()
+        c.execute('INSERT INTO contacts (name, phone_number) VALUES (?, ?)', (name, phone_number))
+        conn.commit()
+        conn.close()
 
+        bot.reply_to(message, f'Контакт {name} з номером {phone_number} успішно доданий.')
+        phone_book_menu(message)
 
 # Хендлер для додавання контакту
 @bot.message_handler(commands=['add_contact'])
 def handle_add_contact(message):
     bot.reply_to(message, 'Введіть ім\'я та призвище контакту:')
     bot.register_next_step_handler(message, ask_contact_name)
-
-# Функція для додавання контакту до телефонної книги користувача
-def add_contact(message):
-    user_id = message.chat.id
-    name = message.text.strip()
-    phone_number = message.text.strip()  # Отримайте номер телефону від користувача
-
-    conn = sqlite3.connect(f'{user_id}_contacts.db')
-    c = conn.cursor()
-    c.execute('INSERT INTO contacts (name, phone_number) VALUES (?, ?)', (name, phone_number))
-    conn.commit()
-    conn.close()
-
-    # Повідомлення про успішне додавання контакту
-    bot.reply_to(message, f'Контакт {name} з номером {phone_number} успішно доданий.')
-
 
 # Хендлер для відображення контактів
 @bot.message_handler(commands=['show_contacts'])
@@ -149,12 +259,13 @@ def show_contacts(message):
 
     if not contacts:
         bot.reply_to(message, 'Ваша телефонна книга порожня.')
+        phone_book_menu(message)
     else:
         response = 'Контакти:\n'
         for contact in contacts:
             response += f'Ім\'я: {contact[0]}, Номер телефону: {contact[1]}\n'
         bot.reply_to(message, response)
-
+        phone_book_menu(message)
 
 # # Хендлер для видалення контакту
 @bot.message_handler(commands=['delete_contact'])
@@ -166,26 +277,26 @@ def handle_delete_contact(message):
 def delete_contact(message):
     user_id = message.chat.id
     name = message.text.strip()
-
     conn = sqlite3.connect(f'{user_id}_contacts.db')
     c = conn.cursor()
     c.execute('SELECT name FROM contacts')
     contacts = c.fetchall()
 
     found = False
+
     for contact in contacts:
         if name.lower() == contact[0].lower():
             c.execute('DELETE FROM contacts WHERE name = ?', (contact[0],))
             conn.commit()
             bot.reply_to(message, f'Контакт {contact[0]} успішно видалений.')
             found = True
-            break
+            phone_book_menu(message)
 
     if not found:
         bot.reply_to(message, f'Контакт з ім\'ям {name} не знайдений.')
+        phone_book_menu(message)
 
     conn.close()
-
 
 # Функція для створення бази даних для нового користувача
 def create_user_database(user_id):
@@ -196,69 +307,46 @@ def create_user_database(user_id):
     conn.close()
 
 
-# перехід на сайт бота
+# ! Хендлер для переходу на сайт бота
 @bot.message_handler(commands=['site'])
-def gosite(message):
-    webbrowser.open('https://soosanin2.github.io/')
+def gosite(message: types.Message):
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton('Відкрити в Телеграм',
+                                          web_app=WebAppInfo(url='https://soosanin2.github.io/')))
+    bot.send_message(message.chat.id,
+                     f"Відкрити у браузері \n \n https://soosanin2.github.io/ \n .",
+                     reply_markup=markup)
 
-@bot.message_handler(commands=['sitem'])
-def gosite_mobile(message):
-    bot.reply_to(message, f'https://soosanin2.github.io/')
 
-
-# отримання всіх команд
+# ! Хендлер для отримання всіх команд
 @bot.message_handler(commands=['commands'])
 def help(message):
-    bot.send_message(message.chat.id, '''start - Запуск бота, привітання
-menu - Меню бота
-new_user - Додавання нового користувача
-site - Відкрити вебсайт (для десктопу)
-sitem - Посилання на сайт (для мобільного)
-id - Дізнатися свій id у телеграмі''')
+    bot.send_message(message.chat.id, '''
+/start - Запуск бота, привітання
+/menu - Меню бота
+/site - Відкрити вебсайт (для десктопу)
+/converter - Запустити конвертор валют
+/phone_book_menu - Відкрити меню телефонної книги 
+/add_contact - Додати контакт до телефонної книги 
+/show_contacts - Показати всі контакти
+/delete_contact - Видалити контакт
+/sitem - Посилання на сайт бота
+/commands - Список усіх команд
+/id - Дізнатися свій id у телеграмі
+''')
+    button_back_to_menu(message)
 
 
-# отримати id користувача
+# ! Хендлер для отримання id користувача
 @bot.message_handler(commands=['id'])
 def id(message):
     bot.reply_to(message, f'Id: {message.from_user.id}')
+    button_back_to_menu(message)
 
 
-#  ! робоче меню
-@bot.message_handler(commands=['menu'])
-def menu(message):
-    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
-    btn1 = types.KeyboardButton(f"пгода\n(смартфон)")
-    btn4 = types.KeyboardButton('Погода на сьогодні')
-    markup.row(btn1, btn4)
-    btn2 = types.KeyboardButton(f"пгода\n(комп'ютер)")
-    btn3 = types.KeyboardButton('закрити меню')
-    markup.row(btn2, btn3)
-    header_text = "--- МЕНЮ ---"
-    bot.send_message(message.chat.id, header_text, reply_markup=markup)
-    bot.register_next_step_handler(message, on_click)
 
-
-def on_click(message):
-    print(f"Користувач {message.from_user.username} натиснув кнопку: {message.text}")
-    if message.text == 'пгода\n(смартфон)':
-        start_weather(message)
-
-    elif message.text == "пгода\n(комп'ютер)":
-        webbrowser.open('https://ua.sinoptik.ua/')
-        menu(message)
-    elif message.text == 'закрити меню':
-        hide_buttons(message)
-    elif message.text == 'Погода на сьогодні':
-        bot.send_message(message.chat.id, 'Введіть назву міста англійською мовою:')
-        bot.register_next_step_handler(message, search_cities)
-
-
-def hide_buttons(message):
-    markup = types.ReplyKeyboardRemove()
-    bot.send_message(message.chat.id, "меню закрите", reply_markup=markup)
-
-
-#  ! отримання координат
+# ! погода
+#  отримання координат
 def search_cities(message):
     city_name = message.text.strip()
     url = f'https://geocoding-api.open-meteo.com/v1/search?name={city_name}'
@@ -305,7 +393,8 @@ def get_city_coordinates(message):
 
 # отримання погоди
 def get_weather_forecast(message, latitude, longitude):
-    url = f'http://api.openweathermap.org/data/2.5/weather?lat={latitude}&lon={longitude}&appid={API}&lang=ua&units=metric'
+    url = f'http://api.openweathermap.org/data/2.5/weather?lat={latitude}&' \
+          f'lon={longitude}&appid={API}&lang=ua&units=metric'
 
     res = requests.get(url)
     data = res.json()
@@ -328,6 +417,7 @@ def get_weather_forecast(message, latitude, longitude):
     Напрям вітру: {get_wind_direction(wind_deg)}\n
     Умови: {clouds}
     """)
+    button_back_to_menu(message)
 
 # розшифровка напряму вітру
 def get_wind_direction(degrees):
@@ -337,134 +427,6 @@ def get_wind_direction(degrees):
                   'Південний', 'Південно-західний', 'Західний', 'Північно-західний']
     index = round(degrees / 45) % 8
     return directions[index]
-
-
-
-
-
-
-
-
-
-
-
-# ___ регістрація юзерів у базу данних (не для бота)
-@bot.message_handler(commands=['new_user'])
-def new_user(message):
-    # создание и подключение бази данных
-    conn = sqlite3.connect('hamster.sql')
-    cur = conn.cursor()
-
-    cur.execute('CREATE TABLE IF NOT EXISTS user (id int auto_increment primary key, name varchar(50), pass varchar(50))')
-
-    conn.commit()
-    cur.close()
-    conn.close()
-
-    bot.send_message(message.chat.id, "Введіть ім'я для реєстрації")
-    bot.register_next_step_handler(message, user_name)
-
-def user_name(message):
-    global name
-    name = message.text.strip()
-    bot.send_message(message.chat.id, "Введіть пароль")
-    bot.register_next_step_handler(message, user_password)
-
-def user_password(message):
-    password = message.text.strip()
-
-# внесення змін до бази даних
-    conn = sqlite3.connect('hamster.sql')
-    cur = conn.cursor()
-
-    cur.execute("INSERT INTO user(name, pass) VALUES ('%s', '%s')" % (name, password))
-
-    conn.commit()
-    cur.close()
-    conn.close()
-
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton('список користувачів', callback_data='users'))
-    #                                                                     это значит что кнопка будет вмест с сообщением
-    bot.send_message(message.chat.id, f"Вітаю {name}, ви зареєстровані", reply_markup=markup)
-
-
-@bot.callback_query_handler(func=lambda call: True)
-def callback(call):
-    conn = sqlite3.connect('hamster.sql')
-    cur = conn.cursor()
-
-    cur.execute('SELECT * FROM user')
-    users = cur.fetchall()
-
-    info =''
-    for el in users:
-        info += f"Ім'я: {el[1]}, пароль: {el[2]}\n"
-
-    cur.close()
-    conn.close()
-
-    bot.send_message(call.message.chat.id, info)
-
-
-
-
-# картинки, звуки, відео
-# @bot.message_handler(content_types=['photo'])
-# def get_photo(message):
-#     bot.reply_to(message, 'Фото отримав')
-
-@bot.message_handler(content_types=['document'])
-def handle_document(message):
-    bot.reply_to(message, 'Документ отримав')
-
-@bot.message_handler(content_types=['audio'])
-def handle_audio(message):
-    bot.reply_to(message, 'Аудіо отримав')
-
-@bot.message_handler(content_types=['video'])
-def handle_video(message):
-    bot.reply_to(message, 'Відео отримав')
-
-@bot.message_handler(content_types=['location'])
-def handle_location(message):
-    bot.reply_to(message, 'Геолокацію отримав')
-
-@bot.message_handler(content_types=['contact'])
-def handle_contact(message):
-    bot.reply_to(message, 'Кконтакт отримав')
-
-@bot.message_handler(content_types=['sticker'])
-def handle_sticker(message):
-    bot.reply_to(message, 'Стикер отримав')
-
-@bot.message_handler(content_types=['voice'])
-def handle_voice(message):
-    bot.reply_to(message, 'Голосове повідомлення отримав')
-
-
-# винесення створенноъ кнопки
-@bot.message_handler(content_types=['photo'])
-def get_photo(message):
-    markup = types.InlineKeyboardMarkup()
-    btn1 = types.InlineKeyboardButton('сайт погоди', url='https://ua.sinoptik.ua/')
-    btn2 = types.InlineKeyboardButton('видалити фото', callback_data='delate')
-    btn3 = types.InlineKeyboardButton('змінити фото', callback_data='edit')
-    markup.row(btn1)
-    markup.row(btn2, btn3)
-    bot.reply_to(message, 'погода тут', reply_markup=markup)
-
-# обробка кнопок
-@bot.callback_query_handler(func=lambda callback: True)
-def callback_message(callback):
-    if callback.data == 'delate':
-        bot.delete_message(callback.message.chat.id, callback.message.message_id - 1)
-    elif callback.data == 'edit':
-        bot.edit_message_text('новий текст', callback.message.chat.id, callback.message.message_id - 1)
-
-
-
-
 
 
 
