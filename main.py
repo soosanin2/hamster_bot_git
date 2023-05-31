@@ -16,10 +16,10 @@ from telebot.types import WebAppInfo
 load_dotenv()
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
-
 bot = telebot.TeleBot(BOT_TOKEN) # ключ телеграм
 
-API = 'a455439cb8ea542bbe57143066b6990a' # ключ погоди
+API_TOKEN = os.environ.get('API_TOKEN')
+API = API_TOKEN # ключ погоди
 
 name = None     # Глобальна змінна для збереження імені контакта
 # currency_converter = CurrencyRates()  # Об'єкт конвертора
@@ -324,13 +324,12 @@ def help(message):
     bot.send_message(message.chat.id, '''
 /start - Запуск бота, привітання
 /menu - Меню бота
-/site - Відкрити вебсайт (для десктопу)
+/site - Відкрити вебсайт 
 /converter - Запустити конвертор валют
 /phone_book_menu - Відкрити меню телефонної книги 
 /add_contact - Додати контакт до телефонної книги 
-/show_contacts - Показати всі контакти
-/delete_contact - Видалити контакт
-/sitem - Посилання на сайт бота
+/show_contacts - Показати всі контакти телефонної книги
+/delete_contact - Видалити контакт з телефонної книги
 /commands - Список усіх команд
 /id - Дізнатися свій id у телеграмі
 ''')
