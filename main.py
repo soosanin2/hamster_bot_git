@@ -7,6 +7,8 @@ import sqlite3
 import json
 import time
 
+from func import *
+
 from dotenv import load_dotenv
 from currency_converter import CurrencyConverter
 # from forex_python.converter import CurrencyRates
@@ -31,9 +33,22 @@ city_data = {}  # Глобальна змінна для збереження д
 # ! При старті бота створюється база даних користувача
 @bot.message_handler(commands=['start'])
 def handle_start(message):
-    user_id = message.chat.id
-    create_user_database(user_id)
-    bot.send_message(message.chat.id, f'Вітаю {message.from_user.first_name} {message.from_user.last_name}!')
+    start(message)
+
+# ! Хендлер для переходу на сайт бота
+@bot.message_handler(commands=['site'])
+def h_gosite(message: types.Message):
+    gosite(message)
+
+# ! Хендлер для отримання всіх команд
+@bot.message_handler(commands=['commands'])
+def h_help(message):
+    help(message)
+
+# ! Хендлер для отримання id користувача
+@bot.message_handler(commands=['id'])
+def h_id(message):
+    id(message)
 
 
 #  ! Головне меню
@@ -80,14 +95,6 @@ def on_click_menu(message):
     elif message.text == 'Сайт бота':
         gosite(message)
 
-# до кнопка повернення до головного меню
-def button_back_to_menu(message):
-    markup = types.InlineKeyboardMarkup()
-    btn_menu = types.InlineKeyboardButton('МЕНЮ', callback_data='menu')
-    markup.add(btn_menu)
-    bot.send_message(message.chat.id, 'Натисніть "МЕНЮ" для повернення на головне меню.', reply_markup=markup)
-
-
 
 # ! конвертор валют
 # Хендлер для запуску ковертора
@@ -123,6 +130,7 @@ def summa(message):
         bot.send_message(message.chat.id, 'Сума має бути більше нуля. Будь ласка, спробуйте ще раз.')
         bot.register_next_step_handler(message, summa)
         return
+
 
 # Обробник обраних користувачем кнопок
 @bot.callback_query_handler(func=lambda call: True)
@@ -297,51 +305,6 @@ def delete_contact(message):
         phone_book_menu(message)
 
     conn.close()
-
-# Функція для створення бази даних для нового користувача
-def create_user_database(user_id):
-    conn = sqlite3.connect(f'{user_id}_contacts.db')
-    c = conn.cursor()
-    c.execute('CREATE TABLE IF NOT EXISTS contacts (name TEXT, phone_number TEXT)')
-    conn.commit()
-    conn.close()
-
-
-# ! Хендлер для переходу на сайт бота
-@bot.message_handler(commands=['site'])
-def gosite(message: types.Message):
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton('Відкрити в Телеграм',
-                                          web_app=WebAppInfo(url='https://soosanin2.github.io/')))
-    bot.send_message(message.chat.id,
-                     f"Відкрити у браузері \n \n https://soosanin2.github.io/ \n .",
-                     reply_markup=markup)
-
-
-# ! Хендлер для отримання всіх команд
-@bot.message_handler(commands=['commands'])
-def help(message):
-    bot.send_message(message.chat.id, '''
-/start - Запуск бота, привітання
-/menu - Меню бота
-/site - Відкрити вебсайт 
-/converter - Запустити конвертор валют
-/phone_book_menu - Відкрити меню телефонної книги 
-/add_contact - Додати контакт до телефонної книги 
-/show_contacts - Показати всі контакти телефонної книги
-/delete_contact - Видалити контакт з телефонної книги
-/commands - Список усіх команд
-/id - Дізнатися свій id у телеграмі
-''')
-    button_back_to_menu(message)
-
-
-# ! Хендлер для отримання id користувача
-@bot.message_handler(commands=['id'])
-def id(message):
-    bot.reply_to(message, f'Id: {message.from_user.id}')
-    button_back_to_menu(message)
-
 
 
 # ! погода
