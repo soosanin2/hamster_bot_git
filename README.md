@@ -66,7 +66,7 @@
 
 Посилання на лендінг: https://soosanin2.github.io/
 
-Посилання на github ендінг: https://github.com/soosanin2/soosanin2.github.io
+Посилання на github лендінг: https://github.com/soosanin2/soosanin2.github.io
 
 Посилання на відкриття чату зі створеним Telegram-ботом: https://t.me/SteelHamsterBot
 
